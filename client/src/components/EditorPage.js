@@ -90,6 +90,8 @@ function EditorPage() {
     navigate("/");
   };
 
+  console.log(clients)
+
   return (
     <div className="container-fluid vh-100">
       <div className="row h-100">
@@ -98,13 +100,7 @@ function EditorPage() {
           className="col-md-2 bg-dark text-light d-flex flex-column h-100"
           style={{ boxShadow: "2px 0px 4px rgba(0, 0, 0, 0.1)" }}
         >
-          <img
-            src="/images/SourceSync.png"
-            alt="Logo"
-            className="img-fluid mx-auto"
-            style={{ maxWidth: "150px", marginTop: "-43px" }}
-          />
-          <hr style={{ marginTop: "-3rem" }} />
+          <h3 className="text-center mt-2 mb-4">SourceSync</h3>
 
           {/* Client list container */}
           <div className="d-flex flex-column flex-grow-1 overflow-auto">
