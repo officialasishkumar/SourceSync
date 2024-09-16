@@ -45,6 +45,24 @@ io.on("connection", (socket) => {
     io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
   });
 
+  // Group messaging feature
+  socket.on(ACTIONS.SEND_MESSAGE, ({ roomId, message, sender }) => {
+    io.in(roomId).emit(ACTIONS.NEW_MESSAGE, { message, sender });
+  });
+
+  // Audio sharing feature
+  socket.on(ACTIONS.START_AUDIO, ({ roomId, userId }) => {
+    socket.to(roomId).emit(ACTIONS.USER_STARTED_AUDIO, { userId });
+  });
+
+  socket.on(ACTIONS.STOP_AUDIO, ({ roomId, userId }) => {
+    socket.to(roomId).emit(ACTIONS.USER_STOPPED_AUDIO, { userId });
+  });
+
+  socket.on(ACTIONS.AUDIO_DATA, ({ roomId, audioChunk, userId }) => {
+    socket.to(roomId).emit(ACTIONS.RECEIVE_AUDIO_DATA, { audioChunk, userId });
+  });
+
   // leave room
   socket.on("disconnecting", () => {
     const rooms = [...socket.rooms];
