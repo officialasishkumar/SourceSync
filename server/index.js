@@ -15,6 +15,7 @@ const getAllConnectedClients = (roomId) => {
       return {
         socketId,
         username: userSocketMap[socketId],
+        isMuted: true,
       };
     }
   );
@@ -26,6 +27,7 @@ io.on("connection", (socket) => {
     userSocketMap[socket.id] = username;
     socket.join(roomId);
     const clients = getAllConnectedClients(roomId);
+    console.log(`${username} joined the room`);
     // notify that new user join
     clients.forEach(({ socketId }) => {
       io.to(socketId).emit(ACTIONS.JOINED, {
@@ -45,13 +47,9 @@ io.on("connection", (socket) => {
     io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
   });
 
-  // Group messaging feature
-  socket.on(ACTIONS.SEND_MESSAGE, ({ roomId, message, sender }) => {
-    io.in(roomId).emit(ACTIONS.NEW_MESSAGE, { message, sender });
-  });
-
   // Audio sharing feature
   socket.on(ACTIONS.START_AUDIO, ({ roomId, userId }) => {
+    console.log("hello")
     socket.to(roomId).emit(ACTIONS.USER_STARTED_AUDIO, { userId });
   });
 
