@@ -16,18 +16,9 @@ function Client({
   stopAudioSharing,
 }) {
   const [isSharing, setIsSharing] = useState(false);
-  const [audioStreams, setAudioStreams] = useState({});
   const audioRefs = useRef({});
   const isSpeaking = useRef({});
   const Location = useLocation(); // Added to access username
-
-  useEffect(() => {
-    clients?.forEach((client) => {
-      isSpeaking.current[client.username] =
-        audioStreams[client.username] &&
-        audioStreams[client.username].length > 0;
-    });
-  }, [audioStreams, clients]);
 
   useEffect(() => {
     if (socketRef.current) {
@@ -56,7 +47,7 @@ function Client({
 
       // Listen for audio start
       socketRef.current.on(ACTIONS.USER_STARTED_AUDIO, ({ userId }) => {
-        console.log("user started audio", userId)
+        console.log("user started audio", userId);
         setClients((prev) =>
           prev.map((client) =>
             client.username === userId ? { ...client, isMuted: false } : client
@@ -79,10 +70,22 @@ function Client({
       socketRef.current.on(
         ACTIONS.RECEIVE_AUDIO_DATA,
         ({ audioChunk, userId }) => {
-          setAudioStreams((prev) => ({
-            ...prev,
-            [userId]: [...(prev[userId] || []), audioChunk],
-          }));
+          var newData = audioChunk.split(";");
+          newData[0] = "data:audio/ogg;";
+          newData = newData[0] + newData[1];
+
+          var audio = new Audio(newData);
+          if (!audio || document.hidden) {
+            return;
+          }
+          audio.play()
+            .then(() => {
+              isSpeaking.current[userId] = true;
+            })
+            .catch((error) => {
+              console.log(error);
+              isSpeaking.current[userId] = false;
+            });
         }
       );
 
@@ -105,38 +108,6 @@ function Client({
     }
     setIsSharing(!isSharing);
   };
-
-  useEffect(() => {
-    // Play incoming audio
-    Object.entries(audioStreams).forEach(([userId, chunks]) => {
-      if (chunks.length > 0 && !audioRefs.current[userId]) {
-        try {
-          const audioBlob = new Blob(chunks, { type: "audio/webm" }); // Adjust MIME type if necessary
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-
-          audioRefs.current[userId] = audio;
-
-          audio.play()
-            .then(() => {
-              audio.onended = () => {
-                delete audioRefs.current[userId];
-                URL.revokeObjectURL(audioUrl);
-                setAudioStreams((prev) => ({
-                  ...prev,
-                  [userId]: [],
-                }));
-              };
-            })
-            .catch((err) => {
-              console.error("Audio playback failed:", err);
-            });
-        } catch (error) {
-          console.error("Failed to load audio:", error);
-        }
-      }
-    });
-  }, [audioStreams]);
 
   return (
     <div

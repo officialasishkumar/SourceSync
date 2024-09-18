@@ -90,23 +90,43 @@ function EditorPage() {
 
   const startAudioSharing = () => {
     navigator.mediaDevices
-      .getUserMedia({ audio: true })
+      .getUserMedia({ audio: true, video: false })
       .then((stream) => {
         socketRef.current.emit(ACTIONS.START_AUDIO, {
           roomId,
           userId: Location.state?.username,
         });
+        var madiaRecorder = new MediaRecorder(stream);
+        var audioChunks = [];
 
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-        mediaRecorder.ondataavailable = (event) => {
-          socketRef.current.emit(ACTIONS.AUDIO_DATA, {
-            roomId,
-            audioChunk: event.data,
-            userId: Location.state?.username,
-          });
-        };
-        mediaRecorder.start(100);
-        socketRef.current.mediaRecorder = mediaRecorder;
+        madiaRecorder.addEventListener("dataavailable", function (event) {
+          audioChunks.push(event.data);
+        });
+
+        madiaRecorder.addEventListener("stop", function () {
+          var audioBlob = new Blob(audioChunks);
+          audioChunks = [];
+          var fileReader = new FileReader();
+          fileReader.readAsDataURL(audioBlob);
+          fileReader.onloadend = function () {
+            var base64String = fileReader.result;
+            socketRef.current.emit(ACTIONS.AUDIO_DATA, {
+              roomId,
+              audioChunk: base64String,
+              userId: Location.state?.username,
+            });
+          };
+
+          madiaRecorder.start();
+          setTimeout(function () {
+            madiaRecorder.stop();
+          }, 1000);
+        });
+
+        madiaRecorder.start();
+        setTimeout(function () {
+            madiaRecorder.stop();
+        }, 1000);      
         setClients((prev) =>
           prev.map((client) =>
             client.username === Location.state?.username
@@ -115,8 +135,8 @@ function EditorPage() {
           )
         );
       })
-      .catch((err) => {
-        console.error("Error accessing microphone:", err);
+      .catch((error) => {
+        console.error("Error capturing audio.", error);
         toast.error("Failed to start audio sharing");
       });
   };
