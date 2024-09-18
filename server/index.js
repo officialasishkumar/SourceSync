@@ -49,11 +49,12 @@ io.on("connection", (socket) => {
 
   // Audio sharing feature
   socket.on(ACTIONS.START_AUDIO, ({ roomId, userId }) => {
-    console.log("hello")
+    console.log("user stated audio")
     socket.to(roomId).emit(ACTIONS.USER_STARTED_AUDIO, { userId });
   });
 
   socket.on(ACTIONS.STOP_AUDIO, ({ roomId, userId }) => {
+    console.log()
     socket.to(roomId).emit(ACTIONS.USER_STOPPED_AUDIO, { userId });
   });
 

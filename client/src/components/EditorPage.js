@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 
 function EditorPage() {
   const codeRef = useRef(null);
+  const [clients, setClients] = useState([]);
 
   const Location = useLocation();
   const navigate = useNavigate();
@@ -35,9 +36,35 @@ function EditorPage() {
         roomId,
         username: Location.state?.username,
       });
+
+      // Listen for new clients joining the chatroom
+      socketRef.current.on(
+        ACTIONS.JOINED,
+        ({ clients, username, socketId }) => {
+          // this insure that new user connected message do not display to that user itself
+          if (username !== Location.state?.username) {
+            toast.success(`${username} joined the room.`);
+          }
+          setClients(clients);
+          // also send the code to sync
+          socketRef.current.emit(ACTIONS.SYNC_CODE, {
+            code: codeRef.current,
+            socketId,
+          });
+        }
+      );
+
+      // listening for disconnected
+      socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+        toast.success(`${username} left the room`);
+        setClients((prev) => {
+          return prev.filter((client) => client.socketId !== socketId);
+        });
+      });
     };
     init();
 
+    console.log(socketRef.current);
     return () => {
       socketRef.current?.disconnect();
     };
@@ -70,7 +97,7 @@ function EditorPage() {
           userId: Location.state?.username,
         });
 
-        const mediaRecorder = new MediaRecorder(stream);
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
         mediaRecorder.ondataavailable = (event) => {
           socketRef.current.emit(ACTIONS.AUDIO_DATA, {
             roomId,
@@ -80,6 +107,13 @@ function EditorPage() {
         };
         mediaRecorder.start(100);
         socketRef.current.mediaRecorder = mediaRecorder;
+        setClients((prev) =>
+          prev.map((client) =>
+            client.username === Location.state?.username
+              ? { ...client, isMuted: false }
+              : client
+          )
+        );
       })
       .catch((err) => {
         console.error("Error accessing microphone:", err);
@@ -95,6 +129,13 @@ function EditorPage() {
         userId: Location.state?.username,
       });
       socketRef.current.mediaRecorder = null;
+      setClients((prev) =>
+        prev.map((client) =>
+          client.username === Location.state?.username
+            ? { ...client, isMuted: true }
+            : client
+        )
+      );
     }
   };
 
@@ -102,9 +143,11 @@ function EditorPage() {
     <div className="container-fluid vh-100">
       <div className="row h-100">
         {/* client panel */}
-        {   
+        {
           <Client
             codeRef={codeRef}
+            clients={clients}
+            setClients={setClients}
             copyRoomId={copyRoomId}
             leaveRoom={leaveRoom}
             socketRef={socketRef}

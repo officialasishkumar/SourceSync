@@ -3,9 +3,12 @@ import Avatar from "react-avatar";
 import { IoMdMic, IoMdMicOff } from "react-icons/io";
 import { ACTIONS } from "../Actions";
 import { toast } from "react-hot-toast";
+import { useLocation } from "react-router-dom"; // Added useLocation
 
 function Client({
   codeRef,
+  clients,
+  setClients,
   copyRoomId,
   leaveRoom,
   socketRef,
@@ -13,22 +16,21 @@ function Client({
   stopAudioSharing,
 }) {
   const [isSharing, setIsSharing] = useState(false);
-  const [clients, setClients] = useState([]);
   const [audioStreams, setAudioStreams] = useState({});
+  const audioRefs = useRef({});
   const isSpeaking = useRef({});
+  const Location = useLocation(); // Added to access username
 
-  useState(() => {
+  useEffect(() => {
     clients?.forEach((client) => {
       isSpeaking.current[client.username] =
         audioStreams[client.username] &&
         audioStreams[client.username].length > 0;
     });
-  }, [audioStreams]);
-
+  }, [audioStreams, clients]);
 
   useEffect(() => {
     if (socketRef.current) {
-      console.log("iamhere")
       // Listen for new clients joining the chatroom
       socketRef.current.on(
         ACTIONS.JOINED,
@@ -36,7 +38,6 @@ function Client({
           if (username !== Location.state?.username) {
             toast.success(`${username} joined the room.`);
           }
-          console.log("hello1")
           setClients(clients);
           socketRef.current.emit(ACTIONS.SYNC_CODE, {
             code: codeRef.current,
@@ -45,16 +46,17 @@ function Client({
         }
       );
 
-      // listening for disconnected
+      // Listen for clients disconnecting
       socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
         toast.success(`${username} left the room`);
-        setClients((prev) => {
-          return prev.filter((client) => client.socketId !== socketId);
-        });
+        setClients((prev) =>
+          prev.filter((client) => client.socketId !== socketId)
+        );
       });
 
-      // New event listeners for chat and audio
+      // Listen for audio start
       socketRef.current.on(ACTIONS.USER_STARTED_AUDIO, ({ userId }) => {
+        console.log("user started audio", userId)
         setClients((prev) =>
           prev.map((client) =>
             client.username === userId ? { ...client, isMuted: false } : client
@@ -63,6 +65,7 @@ function Client({
         toast.success(`${userId} started speaking.`);
       });
 
+      // Listen for audio stop
       socketRef.current.on(ACTIONS.USER_STOPPED_AUDIO, ({ userId }) => {
         setClients((prev) =>
           prev.map((client) =>
@@ -72,22 +75,26 @@ function Client({
         toast.success(`${userId} stopped speaking.`);
       });
 
+      // Listen for receiving audio data
       socketRef.current.on(
         ACTIONS.RECEIVE_AUDIO_DATA,
         ({ audioChunk, userId }) => {
           setAudioStreams((prev) => ({
             ...prev,
-            [userId]: audioChunk,
+            [userId]: [...(prev[userId] || []), audioChunk],
           }));
         }
       );
-    }
 
-    return () => {
-      Object.values(ACTIONS).forEach((action) =>
-        socketRef.current?.off(action)
-      );
-    };
+      // Clean up event listeners on unmount
+      return () => {
+        socketRef.current.off(ACTIONS.JOINED);
+        socketRef.current.off(ACTIONS.DISCONNECTED);
+        socketRef.current.off(ACTIONS.USER_STARTED_AUDIO);
+        socketRef.current.off(ACTIONS.USER_STOPPED_AUDIO);
+        socketRef.current.off(ACTIONS.RECEIVE_AUDIO_DATA);
+      };
+    }
   }, [socketRef.current]);
 
   const toggleAudioSharing = () => {
@@ -101,9 +108,33 @@ function Client({
 
   useEffect(() => {
     // Play incoming audio
-    Object.values(audioStreams).forEach((chunk) => {
-      const audio = new Audio(URL.createObjectURL(new Blob([chunk])));
-      audio.play();
+    Object.entries(audioStreams).forEach(([userId, chunks]) => {
+      if (chunks.length > 0 && !audioRefs.current[userId]) {
+        try {
+          const audioBlob = new Blob(chunks, { type: "audio/webm" }); // Adjust MIME type if necessary
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+
+          audioRefs.current[userId] = audio;
+
+          audio.play()
+            .then(() => {
+              audio.onended = () => {
+                delete audioRefs.current[userId];
+                URL.revokeObjectURL(audioUrl);
+                setAudioStreams((prev) => ({
+                  ...prev,
+                  [userId]: [],
+                }));
+              };
+            })
+            .catch((err) => {
+              console.error("Audio playback failed:", err);
+            });
+        } catch (error) {
+          console.error("Failed to load audio:", error);
+        }
+      }
     });
   }, [audioStreams]);
 
@@ -118,7 +149,10 @@ function Client({
       <div className="d-flex flex-column flex-grow-1 overflow-auto">
         <span className="mb-2">Members</span>
         {clients?.map((client) => (
-          <div className="client-container d-flex align-items-center justify-content-between mb-3">
+          <div
+            key={client.socketId}
+            className="client-container d-flex align-items-center justify-content-between mb-3"
+          >
             <div className="d-flex align-items-center overflow-hidden">
               <Avatar
                 name={client.username}
