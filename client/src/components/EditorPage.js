@@ -14,11 +14,12 @@ import { toast } from "react-hot-toast";
 function EditorPage() {
   const codeRef = useRef(null);
   const [clients, setClients] = useState([]);
-
   const Location = useLocation();
   const navigate = useNavigate();
   const { roomId } = useParams();
   const socketRef = useRef(null);
+  const streamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
 
   useEffect(() => {
     const init = async () => {
@@ -41,12 +42,10 @@ function EditorPage() {
       socketRef.current.on(
         ACTIONS.JOINED,
         ({ clients, username, socketId }) => {
-          // this insure that new user connected message do not display to that user itself
           if (username !== Location.state?.username) {
             toast.success(`${username} joined the room.`);
           }
           setClients(clients);
-          // also send the code to sync
           socketRef.current.emit(ACTIONS.SYNC_CODE, {
             code: codeRef.current,
             socketId,
@@ -64,9 +63,11 @@ function EditorPage() {
     };
     init();
 
-    console.log(socketRef.current);
     return () => {
       socketRef.current?.disconnect();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
   }, []);
 
@@ -92,18 +93,20 @@ function EditorPage() {
     navigator.mediaDevices
       .getUserMedia({ audio: true, video: false })
       .then((stream) => {
+        streamRef.current = stream;
         socketRef.current.emit(ACTIONS.START_AUDIO, {
           roomId,
           userId: Location.state?.username,
         });
-        var madiaRecorder = new MediaRecorder(stream);
+        var mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
         var audioChunks = [];
 
-        madiaRecorder.addEventListener("dataavailable", function (event) {
+        mediaRecorder.addEventListener("dataavailable", function (event) {
           audioChunks.push(event.data);
         });
 
-        madiaRecorder.addEventListener("stop", function () {
+        mediaRecorder.addEventListener("stop", function () {
           var audioBlob = new Blob(audioChunks);
           audioChunks = [];
           var fileReader = new FileReader();
@@ -117,15 +120,15 @@ function EditorPage() {
             });
           };
 
-          madiaRecorder.start();
+          mediaRecorder.start();
           setTimeout(function () {
-            madiaRecorder.stop();
+            mediaRecorder.stop();
           }, 1000);
         });
 
-        madiaRecorder.start();
+        mediaRecorder.start();
         setTimeout(function () {
-            madiaRecorder.stop();
+            mediaRecorder.stop();
         }, 1000);      
         setClients((prev) =>
           prev.map((client) =>
@@ -142,21 +145,33 @@ function EditorPage() {
   };
 
   const stopAudioSharing = () => {
-    if (socketRef.current.mediaRecorder) {
-      socketRef.current.mediaRecorder.stop();
-      socketRef.current.emit(ACTIONS.STOP_AUDIO, {
-        roomId,
-        userId: Location.state?.username,
-      });
-      socketRef.current.mediaRecorder = null;
-      setClients((prev) =>
-        prev.map((client) =>
-          client.username === Location.state?.username
-            ? { ...client, isMuted: true }
-            : client
-        )
-      );
+    if (streamRef.current) {
+      // Stop all tracks in the stream
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+
+    // Emit event to inform other clients that audio sharing has stopped
+    socketRef.current.emit(ACTIONS.STOP_AUDIO, {
+      roomId,
+      userId: Location.state?.username,
+    });
+
+    // Update local client state
+    setClients((prev) =>
+      prev.map((client) =>
+        client.username === Location.state?.username
+          ? { ...client, isMuted: true }
+          : client
+      )
+    );
+
+    toast.success("Audio sharing stopped");
   };
 
   return (

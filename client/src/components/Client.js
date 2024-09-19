@@ -16,7 +16,6 @@ function Client({
   stopAudioSharing,
 }) {
   const [isSharing, setIsSharing] = useState(false);
-  const audioRefs = useRef({});
   const isSpeaking = useRef({});
   const Location = useLocation(); // Added to access username
 
