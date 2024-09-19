@@ -7,7 +7,7 @@ import "codemirror/lib/codemirror.css";
 import CodeMirror from "codemirror";
 import { ACTIONS } from "../Actions";
 
-function Editor({ socketRef, roomId, onCodeChange }) {
+function Editor({ socketRef, roomId, language, onCodeChange }) {
   const editorRef = useRef(null);
   useEffect(() => {
     const init = async () => {

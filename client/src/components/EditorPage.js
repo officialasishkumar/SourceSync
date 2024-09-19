@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import Client from "./Client";
 import Editor from "./Editor";
+import { Button } from "@chakra-ui/react";
+import LanguageSelector from "./LanguageSelector";
+import { executeCode } from "./Api";
+
 import { initSocket } from "../Socket";
 import { ACTIONS } from "../Actions";
 import {
@@ -13,6 +17,9 @@ import { toast } from "react-hot-toast";
 
 function EditorPage() {
   const codeRef = useRef(null);
+  const [output, setOutput] = useState(null);
+  const [language, setLanguage] = useState("javascript");
+  const [isLoading, setIsLoading] = useState(false);
   const [clients, setClients] = useState([]);
   const Location = useLocation();
   const navigate = useNavigate();
@@ -66,7 +73,7 @@ function EditorPage() {
     return () => {
       socketRef.current?.disconnect();
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
@@ -128,8 +135,8 @@ function EditorPage() {
 
         mediaRecorder.start();
         setTimeout(function () {
-            mediaRecorder.stop();
-        }, 1000);      
+          mediaRecorder.stop();
+        }, 1000);
         setClients((prev) =>
           prev.map((client) =>
             client.username === Location.state?.username
@@ -147,7 +154,7 @@ function EditorPage() {
   const stopAudioSharing = () => {
     if (streamRef.current) {
       // Stop all tracks in the stream
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
 
@@ -174,6 +181,29 @@ function EditorPage() {
     toast.success("Audio sharing stopped");
   };
 
+  const runCode = async () => {
+    const sourceCode = codeRef.current;
+    console.log(sourceCode);
+    if (!sourceCode) return;
+    try {
+      setIsLoading(true);
+      const { run: result } = await executeCode(language, sourceCode);
+      console.log(result);
+      if (result.stderr) {
+        result.stderr = result.stderr.split("\n").slice(1).join("\n");
+        setOutput(result.stderr);
+        return;
+      }
+      result.output = result.output.split("\n").slice(1).join("\n");
+      setOutput(result.output.split("\n"));
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to run the code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="container-fluid vh-100">
       <div className="row h-100">
@@ -192,14 +222,31 @@ function EditorPage() {
         }
 
         {/* Editor panel */}
-        <div className="col-md-10 text-light d-flex flex-column h-100 ">
+        <div className="col-md-10 text-light d-flex flex-column h-100">
+          <div className="d-flex flex-row justify-content-end gap-4">
+            <LanguageSelector
+              language={language}
+              onSelect={(language) => {
+                setLanguage(language);
+              }}
+            />
+            <div className="btn btn-success mb-1" onClick={runCode}>
+              Run Code
+            </div>
+          </div>
           <Editor
             socketRef={socketRef}
             roomId={roomId}
+            language={language}
             onCodeChange={(code) => {
               codeRef.current = code;
             }}
           />
+          <div className="my-2 bg-dark text-light p-2 overflow-auto">
+            <pre className="text-light">
+              <code>{output}</code>
+            </pre>
+          </div>
         </div>
       </div>
     </div>
